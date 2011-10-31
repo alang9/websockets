@@ -36,7 +36,7 @@ import Control.Monad.Trans (MonadIO, lift, liftIO)
 import Blaze.ByteString.Builder (Builder)
 import Blaze.ByteString.Builder.Enumerator (builderToByteString)
 import Data.ByteString (ByteString)
-import Data.Enumerator (Enumerator, Iteratee, ($$), (>>==))
+import Data.Enumerator (Enumerator, Iteratee, ($$))
 import qualified Data.Attoparsec.Enumerator as AE
 import qualified Data.Enumerator as E
 
@@ -233,7 +233,7 @@ mkSend send' encoder x = do
     send' $ encoder mask x
 
 singleton :: Monad m => a -> Enumerator a m b
-singleton c = E.checkContinue0 $ \_ f -> f (E.Chunks [c]) >>== E.returnI
+singleton c = E.checkContinue0 $ \_ f -> f (E.Chunks [c])
 
 builderSender :: MonadIO m => Iteratee ByteString m b -> Builder -> m ()
 builderSender outIter x = do
