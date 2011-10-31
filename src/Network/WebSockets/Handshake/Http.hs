@@ -69,8 +69,7 @@ data HandshakeError
     -- | The request was well-formed, but the library user rejected it.
     -- (e.g. "unknown path")
     | RequestRejected Request String
-    -- | for example "EOF came too early" (which is actually a parse error)
-    -- or for your own errors. (like "unknown path"?)
+    -- | To make the 'Error' class happy. Not used at the moment.
     | OtherHandshakeError String
     deriving (Show, Typeable)
 

@@ -43,11 +43,6 @@ runServer host port ws = S.withSocketsDo $ do
     S.listen sock 5
     flip catch (closeSock sock) $ forever $ do
         (conn, _) <- S.accept sock
-        -- Voodoo fix: set this to True as soon as we notice the connection was
-        -- closed. Will prevent sendIter' from even trying to send anything.
-        -- Without it, we got many "Couldn't decode text frame as UTF8" errors
-        -- in the browser (although the payload is definitely UTF8).
-        -- killRef <- newIORef False
         _ <- forkIO $ runWithSocket conn ws >> return ()
         return ()
   where
@@ -68,7 +63,7 @@ runWithSocket s ws = do
 receiveEnum :: Socket -> Enumerator ByteString IO a
 receiveEnum s = E.checkContinue0 $ \loop f -> do
     b <- liftIO $ SB.recv s 4096
-    if b == ""
+    if b == ""  -- empty result means connection closed.
         then E.continue f
         else f (E.Chunks [b]) >>== loop
 
@@ -78,6 +73,15 @@ sendIter s = E.continue go
   where
     go (E.Chunks []) = E.continue go
     go (E.Chunks cs) = do
+      -- Voodoo fix: Check the socket being writable before even trying to
+      -- write to it.
+      --
+      -- Actually, this shouldn't be necessary as SB.sendMany should just fail
+      -- if the socket isn't writeable. However, without it, we got many
+      -- "Couldn't decode text frame as UTF8" errors in the browser (although
+      -- the payload is definitely UTF8).
+      --
+      -- Oh yeah, and there's a race condition, of course.
       b <- liftIO $ S.sIsWritable s
       if b
         then E.tryIO (SB.sendMany s cs) >> E.continue go

@@ -80,7 +80,7 @@ runWebSocketsHandshake :: Protocol p
 runWebSocketsHandshake = runWebSocketsWithHandshake defaultWebSocketsOptions
 
 -- | Receives the initial client handshake, then behaves like
--- 'runWebSocketsWith.
+-- 'runWebSocketsWith'.
 runWebSocketsWithHandshake :: Protocol p
                            => WebSocketsOptions
                            -> (Request -> WebSockets p a)
@@ -95,9 +95,10 @@ runWebSocketsWithHandshake opts goWs outIter = do
 -- initial request. If not, you might want to use 'runWebSocketsWithHandshake'
 -- instead.
 --
--- If the handshake failed, returns HandshakeError. Otherwise, executes the
--- supplied continuation. If you want to accept the connection, you should send
--- the included 'requestResponse', and a 'response400' otherwise.
+-- If the handshake failed, throws a 'HandshakeError' as an iteratee
+-- exception. Otherwise, executes the supplied continuation. If you want to
+-- accept the connection, you should send the included 'requestResponse', and
+-- a 'response400' otherwise.
 runWebSockets :: Protocol p
               => RequestHttpPart
               -> (Request -> WebSockets p a)
@@ -161,19 +162,25 @@ receiveWith = liftIteratee . receiveIteratee
 -- | Underlying iteratee version of 'receiveWith'.
 receiveIteratee :: Decoder p a -> Iteratee ByteString IO a
 receiveIteratee parser = do
+    -- This check is for getting a 'ConnectionClosed' instead of a "not enough
+    -- bytes" parse error when the connection was closed. There's still a race
+    -- condition, of course.
+    --
+    -- Socket will throw a ConnectionClosed iteratee exception when we try to
+    -- read from a closed socket.
     eof <- E.isEOF
     if eof
         then E.throwError ConnectionClosed
         else wrappingParseError . AE.iterParser $ parser
 
--- | Like receiveIteratee, but if the supplied parser is happy with no input,
--- we don't supply any more. This is very, very important when we have parsers
--- that don't necessarily read data, like hybi10's completeRequest.
+-- | Like 'receiveIteratee', but if the supplied parser is happy with no
+-- input, we don't supply any more. This is very, very important when we have
+-- parsers that don't necessarily read data, like hybi10's 'completeRequest'.
 receiveIterateeShy :: Decoder p a -> Iteratee ByteString IO a
 receiveIterateeShy parser = wrappingParseError $ shyIterParser parser
 
--- | Execute an iteratee, wrapping attoparsec-enumeratee's ParseError into the
--- ParseError constructor (which is a ConnectionError).
+-- | Execute an iteratee, wrapping attoparsec-enumeratee's 'ParseError' into
+-- the 'ParseError' constructor (which is a 'ConnectionError').
 wrappingParseError :: (Monad m) => Iteratee a m b -> Iteratee a m b
 wrappingParseError = flip E.catchError $ \e -> E.throwError $
     maybe e (toException . ParseError) $ fromException e
@@ -184,7 +191,7 @@ sendIteratee :: Encoder p a -> a
 sendIteratee enc resp outIter = do
     liftIO $ mkSend (builderSender outIter) enc resp
 
--- | Low-leven sending with an arbitrary 'Encoder'
+-- | Low-level sending with an arbitrary 'Encoder'
 sendWith :: Encoder p a -> a -> WebSockets p ()
 sendWith encoder x = WebSockets $ do
     send' <- sendBuilder <$> ask
@@ -252,6 +259,13 @@ throwWsError :: (Exception e) => e -> WebSockets p a
 throwWsError = liftIteratee . E.throwError
 
 -- | Catch an iteratee error in the WebSockets monad
+--
+-- TODO: This will reset the 'DemultiplexState' in the catch block to what it
+-- was at the beginning, and that is /not/ what we want.
+--
+-- (atm., this is not used in the implementation, so it's not critical. I
+-- (steffen) use it to exit my client thread gently, so @SomeException -> IO
+-- ()@ would be enough for me, which would fix the problem.)
 catchWsError :: WebSockets p a -> (SomeException -> WebSockets p a) -> WebSockets p a
 catchWsError act c = WebSockets $ do
     env <- ask

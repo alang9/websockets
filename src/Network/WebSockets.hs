@@ -48,7 +48,7 @@
 -- /compatible with Hybi10/ and later protocols.
 -- 
 -- > app :: Request -> WebSockets Hybi00 ()
--- > app _ = app1
+-- > app req = acceptRequest req >> app1
 -- > 
 -- > main :: IO ()
 -- > main = runServer "0.0.0.0" 8000 app
@@ -163,10 +163,6 @@ import qualified Network.WebSockets.Protocol.Unsafe as Unsafe
 import qualified Network.WebSockets.Socket as I
 import qualified Network.WebSockets.Types as I
 
--- This doesn't work this way any more. As the Protocol first has to be
--- determined by the request, we can't provide this as a WebSockets action. See
--- the various flavours of runWebSockets.
-
 -- | Read a 'I.Frame' from the socket. Blocks until a frame is received. If the
 -- socket is closed, throws 'ConnectionClosed' (a 'ConnectionError')
 --
@@ -236,11 +232,13 @@ sendBinaryData :: (I.BinaryProtocol p, I.WebSocketsData a)
 sendBinaryData = I.send . I.binaryData
 
 -- | Reject a request, sending a 400 (Bad Request) to the client and throwing a
--- RequestRejected (HandshakeError)
+-- 'RequestRejected' (a 'HandshakeError')
 rejectRequest :: I.Protocol p
               => I.Request -> String -> I.WebSockets p a
 rejectRequest req reason = failHandshakeWith $ I.RequestRejected req reason
 
+-- | Throw a 'HandshakeError', sending an appropriate response 400 (Bad
+-- Request) to the client.
 failHandshakeWith :: forall p a. I.Protocol p
                   => I.HandshakeError -> I.WebSockets p a
 failHandshakeWith err = do

@@ -36,12 +36,12 @@ type Decoder p a = Parser a
 -- | The inverse of a parser
 type Encoder p a = Mask -> a -> B.Builder
 
--- | The connection couldn't be established or broke down unexpectedly. thrown
+-- | The connection couldn't be established or broke down unexpectedly. Thrown
 -- as an iteratee exception.
 data ConnectionError
     -- | The client sent malformed data.
     = ParseError AE.ParseError
-    -- | the client closed the connection while
+    -- | The client closed the connection while
     -- we were trying to receive some data.
     --
     -- todo: Also want this for sending.

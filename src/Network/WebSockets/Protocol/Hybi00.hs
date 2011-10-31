@@ -68,9 +68,6 @@ divBySpaces str
 handshakeHybi00 :: RequestHttpPart
                 -> ErrorT HandshakeError A.Parser Request
 handshakeHybi00 reqHttp@(RequestHttpPart path h) = do
-    -- _ <- lift . A.word8 $ fromIntegral 0x0d
-    -- _ <- lift . A.word8 $ fromIntegral 0x0a
-
     case getHeader "Sec-WebSocket-Version" of
         Left _    -> return ()
         Right "0" -> return ()
